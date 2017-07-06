@@ -29,7 +29,7 @@ const handlers = {
         this.emit(':ask', this.attributes.speechOutput, this.attributes.repromptSpeech);
     },
     'SupportSummary': function () {
-        if (this.event.request.dialogState == "STARTED" || this.event.request.dialogState == "IN_PROGRESS"){
+        if (this.event.request.dialogState == "STARTED" || this.event.request.dialogState == "IN_PROGRESS") {
             this.context.succeed({
                 "response": {
                     "directives": [
@@ -43,52 +43,42 @@ const handlers = {
             });
         } else {
             const featureSlot = this.event.request.intent.slots.feature;
-            if (featureSlot && featureSlot.value) {
-
-                function permute(value) {
-                    var output = [];
-                    var delimeters = ["", "-"];
-
-                    let i = value.indexOf(" ");
-                    if (i == -1) {
-                        output.push(value);
-                    } else {
-                        for (var j = 0; j < delimeters.length; j++) {
-                            let delimeter = delimeters[j];
-                            //console.log(value.slice(0, i) + delimeter + value.slice(i + 1));
-                            output = output.concat(permute(value.slice(0, i) + delimeter + value.slice(i + 1)));
-                        }
-                    }
-                    return output;
-                }
-
+            if (featureSlot && featureSlot.value) { // this should always be true if the dialogue delegation is handled correctly
                 let input = featureSlot.value.toLowerCase();
-                let permutations = permute(input);
+                let permutations = permuteDelimeters(input);
                 let feature = undefined;
-                for (let x = 0; (feature == undefined || (Array.isArray(feature) && feature[0] == undefined)) && x < permutations.length; x++) {
-                    feature = caniuse.find(permutations[x]);
+                for (let i = 0; (feature == undefined || (Array.isArray(feature) && feature[0] == undefined)) && i < permutations.length; i++) {
+                    feature = caniuse.find(permutations[i]);
                 }
 
                 if (Array.isArray(feature)) {
                     feature = feature[0];
                 }
+
                 if (!feature) {
                     this.emit(':tell', this.t('NOT_FOUND', input));
                     return;
                 }
 
                 let support = caniuse.getSupport(feature, true);
-                let words = feature + " is supported in: ";
-                for (var browser in support) {
+                let supported_string = "";
+                for (let browser in support) {
                     if ("y" in support[browser]) {
-                        if (browser == "edge" || browser == "firefox" || browser == "chrome") {
-                            words += browser + " since version " + support[browser]["y"] + ". ";
+                        if (browser == "edge" || browser == "firefox" || browser == "chrome" || browser == "safari") {
+                            supported_string += browser + " since version " + support[browser]["y"] + ". ";
                         } else if (browser == "ie") {
-                            words += "Internet Explorer" + " since version " + support[browser]["y"] + ". ";
+                            supported_string += "Internet Explorer" + " since version " + support[browser]["y"] + ". ";
                         }
                     }
                 }
-                this.emit(':tell', words);
+
+                if (supported_string == "") {
+                    this.attributes.speechOutput = feature + " is currently not supported in any major browsers";
+                } else {
+                    this.attributes.speechOutput = feature + " is supported in: " + supported_string;
+                }
+                this.attributes.repromptSpeech = this.t('HELP_REPROMPT');
+                this.emit(':tell', this.attributes.speechOutput, this.attributes.repromptSpeech);
             }
         }
     },
@@ -118,10 +108,26 @@ const handlers = {
 
 exports.handler = function (event, context) {
     const alexa = Alexa.handler(event, context);
-    alexa.APP_ID = APP_ID;
+    alexa.appId = APP_ID;
     // To enable string internationalization (i18n) features, set a resources object.
     alexa.resources = languageStrings;
     alexa.registerHandlers(handlers);
     alexa.execute();
 };
+
+function permuteDelimeters(value) {
+    let output = [];
+    let delimeters = ["", "-"];
+
+    let i = value.indexOf(" ");
+    if (i == -1) {
+        output.push(value);
+    } else {
+        for (let j = 0; j < delimeters.length; j++) {
+            let delimeter = delimeters[j];
+            output = output.concat(permuteDelimeters(value.slice(0, i) + delimeter + value.slice(i + 1)));
+        }
+    }
+    return output;
+}
 
